@@ -10,10 +10,13 @@ start:
     mov [driveid], dl       ; Save drive ID
     call check_long_mode    ; Check for long mode support
     call get_memory_info    ; Print memory map
+    call test_a20           ; Test a20
     jmp load_kernel         ; Load the kernel
 
 
 check_long_mode:
+    mov si, long_mode_test_msg
+    call print_string
     o32 mov eax, 0x80000000         ; 将 0x80000000 加载到 EAX 寄存器，这是 CPUID 指令的一个特定调用号，用于查询支持的扩展功能级别
     cpuid
     o32 cmp eax, 0x80000001         ; 比较 eax 的值与 0x80000001。如果 eax 小于 0x80000001，说明 CPU 不支持该扩展级别
@@ -75,9 +78,26 @@ iter_mem_map:
     ; Check if more entries are available
     test ebx, ebx       ; EBX is continuation value
     jnz iter_mem_map        ; If EBX != 0, continue
-    ret
+    
 iter_return:
     ret
+
+
+test_a20:
+    mov si, a20_test_msg
+    call print_string
+    mov ax, 0xffff
+    mov es, ax
+    mov word[0x7c00], 0xa200
+    cmp word[es:0x7c10], 0xa200
+    jne test_a20_ret
+    mov word[0x7c00], 0xb200
+    cmp word[es:0x7c10], 0xb200
+    je print_a20_disabled_msg
+
+test_a20_ret:
+    ret
+
 
 load_kernel:
     mov si, ReadPacket           ; 将 SI 寄存器指向 ReadPacket 数据包
@@ -111,6 +131,10 @@ print_read_kernel_err_msg:
 
 print_meminfo_err_msg:
     mov si, meminfo_err_msg   ; 将消息的地址加载到 SI 
+    jmp next_char    
+
+print_a20_disabled_msg:
+    mov si, a20_disabled_msg   ; 将消息的地址加载到 SI 
     jmp next_char    
 
 next_char:
@@ -158,11 +182,14 @@ print_string:
 
 driveid: db 0  ; 定义驱动器id
 msg: db "Start Loader Process", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
+long_mode_test_msg: db "Long mode test", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 long_mode_err_msg: db "Long mode not supported", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 huge_page_err_msg: db "1G page not supported", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 meminfo_err_msg: db "Get memory info not supported", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 meminfo_start_msg: db "Get memory map", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 read_kernel_err_msg: db "Read kernel error", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
+a20_test_msg: db "A20 line test", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
+a20_disabled_msg: db "A20 line is disabled", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 ReadPacket: times 16 db 0           ; 定义结构体16字节
 hex_digits: db "0123456789ABCDEF"  ; 十六进制字符集
 
