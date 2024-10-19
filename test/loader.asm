@@ -8,9 +8,11 @@ start:
     mov ss, ax
     mov sp, 0x7C00          ; Set up stack
     mov [driveid], dl       ; Save drive ID
+    call set_video_mode     ; Set video mode
     call check_long_mode    ; Check for long mode support
     call get_memory_info    ; Print memory map
     call test_a20           ; Test a20
+    
     jmp load_kernel         ; Load the kernel
 
 
@@ -29,7 +31,7 @@ check_long_mode:
 
 
 check_huge_page:
-    mov eax, 0x80000001
+    o32 mov eax, 0x80000001
     cpuid
     test edx,(1<<26)
     jz print_huge_page_err_msg
@@ -41,11 +43,11 @@ get_memory_info:
     
     mov ax, 0
     mov es, ax              ; Ensure ES is 0
-    xor ebx, ebx        ; EBX = 0 to start
-    mov eax, 0xE820 
-    mov edx, 0x534D4150 ; 'SMAP'
-    mov ecx, 20         ; Buffer size
-    mov edi, 0x9000     ; EDI points to buffer at 0x9000
+    o32 xor ebx, ebx        ; EBX = 0 to start
+    o32 mov eax, 0xE820 
+    o32 mov edx, 0x534D4150 ; 'SMAP'
+    o32 mov ecx, 20         ; Buffer size
+    o32 mov edi, 0x9000     ; EDI points to buffer at 0x9000
     int 0x15            ; BIOS call
     jc print_meminfo_err_msg
 
@@ -68,10 +70,10 @@ get_memory_info:
                                 ; 有些 BIOS 版本可能会返回这个字段，用于描述额外的内存属性。通常情况下这个字段被忽略或设为 0。
                                 ; 标准的 0xE820 调用返回的结构体仅包含上述的 20 字节内容，如果有扩展属性，它会出现在返回结构的后面。
 iter_mem_map:
-    mov eax, 0xE820 
-    mov edx, 0x534D4150 ; 'SMAP'
-    mov ecx, 20         ; Buffer size
-    mov edi, 0x9000     ; EDI points to buffer at 0x9000
+    o32 mov eax, 0xE820 
+    o32 mov edx, 0x534D4150 ; 'SMAP'
+    o32 mov ecx, 20         ; Buffer size
+    o32 mov edi, 0x9000     ; EDI points to buffer at 0x9000
     int 0x15            ; BIOS call
     jc iter_return
 
@@ -96,6 +98,27 @@ test_a20:
     je print_a20_disabled_msg
 
 test_a20_ret:
+    ret
+
+set_video_mode:
+    mov ax, 3           ; 将寄存器 AX 设置为 3。这表示将视频模式设置为 80x25 的文本模式，具有 16 种颜色
+    int 0x10            ; 调用 BIOS 中断 0x10，用于视频服务。这里用来设置指定的视频模式
+    
+    mov si, text_mode_msg   ; 将 SI 寄存器设置为消息的地址，text_mode_msg 是字符串数据的起始位置
+    mov ax, 0xb800          ; 将 AX 设置为 0xB800，这是文本模式下的显存段地址
+    mov es, ax              ; 将 ES 段寄存器设置为 0xB800，表示显存段
+    xor di, di              ; 将 DI 寄存器清零，用于存储显存的偏移地址
+    mov cx, text_mode_msg_len   ;将 CX 寄存器设置为消息的长度，作为循环计数器
+
+print_set_video_msg:
+    mov al, [si]                ; 将 SI 所指向的消息字符加载到 AL 寄存器中
+    mov [es:di], al             ; 将 AL 中的字符写入显存的 ES:DI 位置，这样字符就会显示在屏幕上
+    mov byte [es:di+1], 0xa     ; 将颜色属性 0xA（亮绿色）写入显存的下一个字节，用于设置字符的颜色
+
+    add di, 2                   ; 将 DI 增加 2，指向显存中的下一个字符位置（每个字符占用两个字节：一个用于字符本身，一个用于颜色）
+    add si, 1                   ; 将 SI 增加 1，指向消息的下一个字符
+    loop print_set_video_msg    ; CX 寄存器递减，如果 CX 不为零，则继续循环
+    call print_newline
     ret
 
 
@@ -192,6 +215,9 @@ a20_test_msg: db "A20 line test", 0ah, 0dh ,0 ; 定义消息，0 表示字符串
 a20_disabled_msg: db "A20 line is disabled", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 ReadPacket: times 16 db 0           ; 定义结构体16字节
 hex_digits: db "0123456789ABCDEF"  ; 十六进制字符集
+
+text_mode_msg: db "Set up text mode"
+text_mode_msg_len: equ $-text_mode_msg
 
 
 
