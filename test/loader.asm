@@ -88,14 +88,18 @@ iter_return:
 test_a20:
     mov si, a20_test_msg
     call print_string
-    mov ax, 0xffff
+    mov ax, 0xffff 
     mov es, ax
-    mov word[0x7c00], 0xa200
-    cmp word[es:0x7c10], 0xa200
+    mov word[0x7c00], 0xa200        ; 0:0x7c00 = 0 * 16 + 0x7c00 = 0x7c00 ,使用随机数0xa200测试
+    cmp word[es:0x7c10], 0xa200     ; 0xffff:0x7c10 = 0xffff * 16 + 0x7c10 = 0x107c00
     jne test_a20_ret
-    mov word[0x7c00], 0xb200
-    cmp word[es:0x7c10], 0xb200
-    je print_a20_disabled_msg
+    mov word[0x7c00], 0xb200        ; 重复测试
+    cmp word[es:0x7c10], 0xb200                    
+    je print_a20_disabled_msg                        ;  20                       0
+                                                     ;  ^                        ^
+                                                     ;  |                        | 
+                                    ; 0x107c00    ->    1 0000 0111 1100 0000 0000
+                                    ; 0x007c00    <-    0 0000 0111 1100 0000 0000 
 
 test_a20_ret:
     ret
