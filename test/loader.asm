@@ -217,7 +217,6 @@ ReadPacket: times 16 db 0           ; 定义结构体16字节
 hex_digits: db "0123456789ABCDEF"  ; 十六进制字符集
 
 text_mode_msg: db "Set up text mode"
- : equ $-text_mode_msg
-
+text_mode_msg_len: equ $-text_mode_msg
 
 
