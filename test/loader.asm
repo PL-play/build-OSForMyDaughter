@@ -128,7 +128,7 @@ load_kernel:
     mov word[si+2], 100          ; 读取 100 个扇区
     mov word[si+4], 0            ; offset
     mov word[si+6], 0x1000       ; segment. 0x1000:0 = 0x1000*16+0=0x10000
-    mov dword[si+8], 1           ; 读取的起始LBA地址为1（从磁盘第一个扇区开始）
+    mov dword[si+8], 6           ; 读取的起始LBA地址为6（从磁盘第7个扇区开始），因为MBR在以第一个扇区，loader本身占5个扇区，内核将在第7个扇区
     mov dword[si+0xc], 0         ; LBA地址的高32位设为0（仅支持32位LBA的情况）
     mov dl, [driveid]            ; 将驱动器ID加载到 DL（如0x80代表第一个硬盘）
     mov ah, 0x42                 ; 设置AH寄存器为0x42，表示扩展磁盘读操作
@@ -217,7 +217,7 @@ ReadPacket: times 16 db 0           ; 定义结构体16字节
 hex_digits: db "0123456789ABCDEF"  ; 十六进制字符集
 
 text_mode_msg: db "Set up text mode"
-text_mode_msg_len: equ $-text_mode_msg
+ : equ $-text_mode_msg
 
 
 
