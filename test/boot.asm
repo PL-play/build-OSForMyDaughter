@@ -12,7 +12,7 @@ test_disk_extension:
     mov [driveid], dl        ; 保存驱动器ID到变量 [DriveId] 中
     mov ah, 0x41             ; 设置 int 0x13 的功能号为 0x41，用于检测扩展磁盘服务支持
     mov bx, 0x55aa           ; BX 设为 0x55AA，作为调用的签名，用于验证
-    int 0x13                 ; 调用BIOS磁盘服务中断，检测扩展磁盘支持
+    int 0x13                 ; 调用BIOS磁盘服务中断，检测 扩展磁盘支持
     jc not_support           ; 如果CF标志位（Carry Flag）设置为1，则跳转到 not_support，表示不支持
     cmp bx, 0xaa55           ; 检查BX寄存器是否返回 0xAA55，如果不是，则表示不支持
     jne not_support          ; 如果BX不等于0xAA55，则跳转到 not_support，表示不支持
