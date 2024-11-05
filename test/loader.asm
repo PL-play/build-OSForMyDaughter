@@ -2,17 +2,14 @@
 [ORG 0x7E00]
 
 start:
-    xor ax, ax
-    mov ds, ax
-    mov es, ax              ; Initialize ES to 0
-    mov ss, ax
-    mov sp, 0x7C00          ; Set up stack
+    
     mov [driveid], dl       ; Save drive ID
     call set_video_mode     ; Set video mode
     call check_long_mode    ; Check for long mode support
     call get_memory_info    ; Print memory map
     call test_a20           ; Test a20
     
+   
     jmp load_kernel         ; Load the kernel
 
 
@@ -102,27 +99,32 @@ test_a20:
                                     ; 0x007c00    <-    0 0000 0111 1100 0000 0000 
 
 test_a20_ret:
+    xor ax,ax
+    mov es,ax
     ret
 
 set_video_mode:
+    
     mov ax, 3           ; 将寄存器 AX 设置为 3。这表示将视频模式设置为 80x25 的文本模式，具有 16 种颜色
     int 0x10            ; 调用 BIOS 中断 0x10，用于视频服务。这里用来设置指定的视频模式
+    mov si, text_mode_msg
+    call print_string
     
-    mov si, text_mode_msg   ; 将 SI 寄存器设置为消息的地址，text_mode_msg 是字符串数据的起始位置
-    mov ax, 0xb800          ; 将 AX 设置为 0xB800，这是文本模式下的显存段地址
-    mov es, ax              ; 将 ES 段寄存器设置为 0xB800，表示显存段
-    xor di, di              ; 将 DI 寄存器清零，用于存储显存的偏移地址
-    mov cx, text_mode_msg_len   ;将 CX 寄存器设置为消息的长度，作为循环计数器
+;     mov si, text_mode_msg   ; 将 SI 寄存器设置为消息的地址，text_mode_msg 是字符串数据的起始位置
+;     mov ax, 0xb800          ; 将 AX 设置为 0xB800，这是文本模式下的显存段地址
+;     mov es, ax              ; 将 ES 段寄存器设置为 0xB800，表示显存段
+;     xor di, di              ; 将 DI 寄存器清零，用于存储显存的偏移地址
+;     mov cx, text_mode_msg_len   ;将 CX 寄存器设置为消息的长度，作为循环计数器
 
-print_set_video_msg:
-    mov al, [si]                ; 将 SI 所指向的消息字符加载到 AL 寄存器中
-    mov [es:di], al             ; 将 AL 中的字符写入显存的 ES:DI 位置，这样字符就会显示在屏幕上
-    mov byte [es:di+1], 0xa     ; 将颜色属性 0xA（亮绿色）写入显存的下一个字节，用于设置字符的颜色
+; print_set_video_msg:
+;     mov al, [si]                ; 将 SI 所指向的消息字符加载到 AL 寄存器中
+;     mov [es:di], al             ; 将 AL 中的字符写入显存的 ES:DI 位置，这样字符就会显示在屏幕上
+;     mov byte [es:di+1], 0xa     ; 将颜色属性 0xA（亮绿色）写入显存的下一个字节，用于设置字符的颜色
 
-    add di, 2                   ; 将 DI 增加 2，指向显存中的下一个字符位置（每个字符占用两个字节：一个用于字符本身，一个用于颜色）
-    add si, 1                   ; 将 SI 增加 1，指向消息的下一个字符
-    loop print_set_video_msg    ; CX 寄存器递减，如果 CX 不为零，则继续循环
-    call print_newline
+;     add di, 2                   ; 将 DI 增加 2，指向显存中的下一个字符位置（每个字符占用两个字节：一个用于字符本身，一个用于颜色）
+;     add si, 1                   ; 将 SI 增加 1，指向消息的下一个字符
+;     loop print_set_video_msg    ; CX 寄存器递减，如果 CX 不为零，则继续循环
+;     call print_newline
     ret
 
 
@@ -144,6 +146,7 @@ load_kernel:
 protected_mode:
     mov si, swith_protectedmode_msg
     call print_string
+    
     cli                         ; 禁用中断
     lgdt [gdt_descriptor]       ; 将GDT加载到GDTR寄存器中
     lidt [idt_descriptor]       ; 加载idt
@@ -284,6 +287,9 @@ protected_mode_entry:
     mov ss, ax
     mov esp, 0x7c00         ; 设置堆栈指针 ESP 为 0x7C00。在保护模式下，需要重新初始化堆栈指针，确保堆栈地址有效
     
+    mov byte [0xb8000], 'q'   ; 尝试在屏幕上打印字符 'P'
+    mov byte [0xb8001], 0x0a  ; 设置字符属性
+    
     jmp .halt                 ; 跳转到 halt 标签，停止 CPU
 .halt:
     hlt                       ; 停止 CPU
@@ -305,7 +311,7 @@ protectedmode_msg: db "Protected mode", 0ah, 0dh ,0 ; 定义消息，0 表示字
 ReadPacket: times 16 db 0           ; 定义结构体16字节
 hex_digits: db "0123456789ABCDEF"  ; 十六进制字符集
 
-text_mode_msg: db "Set up text mode"
+text_mode_msg: db "Set up text mode",0ah, 0dh ,0
 text_mode_msg_len: equ $-text_mode_msg
 
 
