@@ -2,16 +2,16 @@
 [ORG 0x7E00]
 
 start:
-    
     mov [driveid], dl       ; Save drive ID
     call set_video_mode     ; Set video mode
-    ; call check_long_mode    ; Check for long mode support
-    ; call load_kernel        ; Load the kernel
-    ; call get_memory_info    ; Print memory map
-    ; call test_a20           ; Test a20
-    
+    mov si, empty_msg
+    call print_string
+    call check_long_mode    ; Check for long mode support
+    call load_kernel        ; Load the kernel
+    call get_memory_info    ; Print memory map
+    call test_a20           ; Test a20
     jmp protected_mode
-    ;jmp load_kernel         ; Load the kernel
+    ;
 
 
 check_long_mode:
@@ -246,6 +246,7 @@ gdt_start:
                             ; ||++------ (Bits 4-5) AVL (Available for system software)：可供系统软件使用，通常置0
                             ; |+-------- (Bit 6) L (Long)：1表示这是64位代码段（只在x86-64中有效），这里为0
                             ; +--------- (Bit 7) G (Granularity) 粒度位：1表示段界限以4KB为单位，0表示以字节为单位
+        db 0x00             ; 基地址高8位
     data_segment:
         dw 0xFFFF          ; 段界限低16位
         dw 0x0000          ; 基地址低16位 0x7E00?
@@ -287,8 +288,10 @@ protected_mode_entry:
     mov ss, ax
     mov esp, 0x7c00         ; 设置堆栈指针 ESP 为 0x7C00。在保护模式下，需要重新初始化堆栈指针，确保堆栈地址有效
     
-    mov byte [0xb8000], 'q'   ; 尝试在屏幕上打印字符 'P'
+    mov byte [0xb8000], 'P'   ; 尝试在屏幕上打印字符 'P'
     mov byte [0xb8001], 0x0a  ; 设置字符属性
+    mov byte [0xb8002], 'M'   ; 尝试在屏幕上打印字符 'P'
+    mov byte [0xb8003], 0x0a  ; 设置字符属性
     
     jmp .halt                 ; 跳转到 halt 标签，停止 CPU
 .halt:
@@ -297,6 +300,7 @@ protected_mode_entry:
 
 
 driveid: db 0  ; 定义驱动器id
+empty_msg: db "", 0ah, 0dh, 0 ; 定义消息，0 表示字符串结束
 msg: db "Start Loader Process", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 long_mode_test_msg: db "Long mode test", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束
 long_mode_err_msg: db "Long mode not supported", 0ah, 0dh ,0 ; 定义消息，0 表示字符串结束

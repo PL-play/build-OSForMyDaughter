@@ -36,6 +36,7 @@ start:
     call print_string
 
     call swith_protected_mode
+    jmp halt
 
 
 
@@ -155,15 +156,22 @@ test_a20_ret:
     ret
 
 swith_protected_mode:
-    cli
-    lgdt [Gdt32Ptr]
-    lidt [Idt32Ptr]
+    cli                         ; 禁用中断
+    lgdt [gdt_descriptor]       ; 将GDT加载到GDTR寄存器中
+    lidt [idt_descriptor]       ; 加载idt
 
-    mov eax,cr0
-    or eax,1
-    mov cr0,eax
+    mov eax, cr0                ; 设置CR0寄存器的保护模式位来启用保护模式
+    or eax, 0x1                 ; 设置CR0的保护模式位
+    mov cr0, eax
 
-    jmp 8:PMEntry
+    jmp 8:protected_mode_entry  ; 不能使用mov更新cs寄存器。
+
+                                ; 00001 0 00b
+                                ; ||||| | ||
+                                ; ||||| | |+-- (Bit 0-1) RPL位
+                                ; ||||| |+--- (Bit 2) TI，0表示GDT，1,LDT
+                                ; |||||
+                                ; ||||+----- (Bit 3-16) GDT索引
 
 long_mode_test_error:
     mov si, long_mode_err_msg
@@ -181,8 +189,7 @@ test_a20_fail:
     mov si,a20_disabled_msg
     call print_string
     jmp End
-ReadError:
-NotSupport:
+
 End:
     hlt
     jmp End
@@ -202,48 +209,81 @@ end:
     ret
 
 [BITS 32]
-PMEntry:
-    mov ax,0x10
-    mov ds,ax
-    mov es,ax
-    mov ss,ax
-    mov esp,0x7c00
-
-    mov byte[0xb8000], 'P'   ; 尝试在屏幕上打印字符 'P'
-    mov byte[0xb8001], 0xa  ; 设置字符属性
-
-
-PEnd:
-    hlt
-    jmp PEnd
-
-
-
-
-Gdt32:
-    dq 0
-Code32:
-    dw 0xffff
-    dw 0
-    db 0
-    db 0x9a
-    db 0xcf
-    db 0
-Data32:
-    dw 0xffff
-    dw 0
-    db 0
-    db 0x92
-    db 0xcf
-    db 0
+protected_mode_entry:
+    mov ax, 0x10            ; 将段选择子 0x10（通常为数据段选择子）加载到 AX 寄存器中。0x10 应该指向 GDT 中的数据段描述符
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov esp, 0x7c00         ; 设置堆栈指针 ESP 为 0x7C00。在保护模式下，需要重新初始化堆栈指针，确保堆栈地址有效
     
-Gdt32Len: equ $-Gdt32
+    mov byte [0xb8000], 'P'   ; 尝试在屏幕上打印字符 'P'
+    mov byte [0xb8001], 0x0a  ; 设置字符属性
+    mov byte [0xb8002], 'M'   ; 尝试在屏幕上打印字符 'M'
+    mov byte [0xb8003], 0x0a  ; 设置字符属性
+    ret
 
-Gdt32Ptr: dw Gdt32Len-1
-          dd Gdt32
 
-Idt32Ptr: dw 0
-          dd 0
+halt:
+    hlt
+    jmp halt
+
+
+gdt_start:
+    dq 0x0000000000000000  ; 空描述符，GDT中的第一个描述符必须是空的
+    code_segment:
+        dw 0xFFFF          ; 段界限低16位
+        dw 0x0000         ; 基地址低16位 0x7E00?
+        db 0x00            ; 基地址中间8位
+        db 10011010b       ; 访问权限位（可执行、只读、Ring 0特权级别）
+                            ; 10011010b
+                            ; ||||||||
+                            ; |||||||+-- (Bit 0) Accessed 位：1表示段已被访问，0表示未被访问。CPU自动设置。
+                            ; ||||||+--- (Bit 1) 可读/写位（对数据段是可写，对代码段是可读）：1表示允许读取，0表示不允许。
+                            ; |||||+---- (Bit 2) DC 位（方向/一致性）：对于数据段，1表示向下扩展；对于代码段，1表示只允许相同特权级别调用。
+                            ; ||||+----- (Bit 3) Executable 位：1表示代码段（可执行），0表示数据段。
+                            ; |||+------ (Bit 4) Descriptor Type (S位)：1表示普通段（代码或数据），0表示系统段。
+                            ; ||+------- (Bits 5-6) DPL (Descriptor Privilege Level) 特权级别：00表示Ring 0（最高特权级别）。
+                            ; |+-------- (Bit 7) Present (P位)：1表示段有效，0表示段无效。
+        db 11001111b       ; 段界限高4位和标志
+                            ; 11001111b
+                            ; ||||||||
+                            ; ||||++++-- (Bits 0-3) 段界限的高4位
+                            ; ||++------ (Bits 4-5) AVL (Available for system software)：可供系统软件使用，通常置0
+                            ; |+-------- (Bit 6) L (Long)：1表示这是64位代码段（只在x86-64中有效），这里为0
+                            ; +--------- (Bit 7) G (Granularity) 粒度位：1表示段界限以4KB为单位，0表示以字节为单位
+        db 0x00             ; 基地址高8位
+    data_segment:
+        dw 0xFFFF          ; 段界限低16位
+        dw 0x0000          ; 基地址低16位 0x7E00?
+        db 0x00            ; 基地址中间8位
+        db 10010010b       ; 访问权限位（可读、可写、Ring 0特权级别）
+                            ; 10010010b
+                            ; ||||||||
+                            ; |||||||+-- (Bit 0) Accessed 位：1表示段已被访问，0表示未被访问。CPU自动设置。
+                            ; ||||||+--- (Bit 1) 可读/写位（对数据段是可写，对代码段是可读）：1表示允许读取，0表示不允许。
+                            ; |||||+---- (Bit 2) DC 位（方向/一致性）：对于数据段，1表示向下扩展；对于代码段，1表示只允许相同特权级别调用。
+                            ; ||||+----- (Bit 3) Executable 位：1表示代码段（可执行），0表示数据段。
+                            ; |||+------ (Bit 4) Descriptor Type (S位)：1表示普通段（代码或数据），0表示系统段。
+                            ; ||+------- (Bits 5-6) DPL (Descriptor Privilege Level) 特权级别：00表示Ring 0（最高特权级别）。
+                            ; |+-------- (Bit 7) Present (P位)：1表示段有效，0表示段无效。
+        db 11001111b       ; 段界限高4位和标志
+                            ; 11001111b
+                            ; ||||||||
+                            ; ||||++++-- (Bits 0-3) 段界限的高4位
+                            ; ||++------ (Bits 4-5) AVL (Available for system software)：可供系统软件使用，通常置0
+                            ; |+-------- (Bit 6) L (Long)：1表示这是64位代码段（只在x86-64中有效），这里为0
+                            ; +--------- (Bit 7) G (Granularity) 粒度位：1表示段界限以4KB为单位，0表示以字节为单位
+
+        db 0x00            ; 基地址高8位
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1   ; GDT大小
+    dd gdt_start                 ; GDT基地址
+
+          
+idt_descriptor: dw 0
+                dd 0
 
 
 Gdt64:
