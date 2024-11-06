@@ -5,22 +5,23 @@ start:
     
     mov [driveid], dl       ; Save drive ID
     call set_video_mode     ; Set video mode
-    call check_long_mode    ; Check for long mode support
-    call get_memory_info    ; Print memory map
-    call test_a20           ; Test a20
+    ; call check_long_mode    ; Check for long mode support
+    ; call load_kernel        ; Load the kernel
+    ; call get_memory_info    ; Print memory map
+    ; call test_a20           ; Test a20
     
-   
-    jmp load_kernel         ; Load the kernel
+    jmp protected_mode
+    ;jmp load_kernel         ; Load the kernel
 
 
 check_long_mode:
     mov si, long_mode_test_msg
     call print_string
-    o32 mov eax, 0x80000000         ; 将 0x80000000 加载到 EAX 寄存器，这是 CPUID 指令的一个特定调用号，用于查询支持的扩展功能级别
+    mov eax, 0x80000000         ; 将 0x80000000 加载到 EAX 寄存器，这是 CPUID 指令的一个特定调用号，用于查询支持的扩展功能级别
     cpuid
-    o32 cmp eax, 0x80000001         ; 比较 eax 的值与 0x80000001。如果 eax 小于 0x80000001，说明 CPU 不支持该扩展级别
+    cmp eax, 0x80000001         ; 比较 eax 的值与 0x80000001。如果 eax 小于 0x80000001，说明 CPU 不支持该扩展级别
     jb print_long_mode_err_msg  ;
-    o32 mov eax, 0x80000001
+    mov eax, 0x80000001
     cpuid
     test edx,(1<<29)            ; 测试 EDX 寄存器的第29位是否为1。这一位表示CPU是否支持长模式（64位模式）。(1<<29) 表示将第29位设置为1
     jz print_long_mode_err_msg  ; 如果 eax 小于 0x80000001，跳转到 print_long_mode_err_msg 标签，表示该CPU不支持这些扩展功能
@@ -38,8 +39,6 @@ get_memory_info:
     mov si, meminfo_start_msg
     call print_string
     
-    mov ax, 0
-    mov es, ax              ; Ensure ES is 0
     o32 xor ebx, ebx        ; EBX = 0 to start
     o32 mov eax, 0xE820 
     o32 mov edx, 0x534D4150 ; 'SMAP'
@@ -90,7 +89,7 @@ test_a20:
     mov word[0x7c00], 0xa200        ; 0:0x7c00 = 0 * 16 + 0x7c00 = 0x7c00 ,使用随机数0xa200测试
     cmp word[es:0x7c10], 0xa200     ; 0xffff:0x7c10 = 0xffff * 16 + 0x7c10 = 0x107c00
     jne test_a20_ret
-    mov word[0x7c00], 0xb200        ; 重复测 试  
+    mov word[0x7c00], 0xb200        ; 重复测试  
     cmp word[es:0x7c10], 0xb200                    
     je print_a20_disabled_msg                        ;  20                       0
                                                      ;  ^                        ^
@@ -107,8 +106,8 @@ set_video_mode:
     
     mov ax, 3           ; 将寄存器 AX 设置为 3。这表示将视频模式设置为 80x25 的文本模式，具有 16 种颜色
     int 0x10            ; 调用 BIOS 中断 0x10，用于视频服务。这里用来设置指定的视频模式
-    mov si, text_mode_msg
-    call print_string
+    ; mov si, text_mode_msg
+    ; call print_string
     
 ;     mov si, text_mode_msg   ; 将 SI 寄存器设置为消息的地址，text_mode_msg 是字符串数据的起始位置
 ;     mov ax, 0xb800          ; 将 AX 设置为 0xB800，这是文本模式下的显存段地址
@@ -142,10 +141,11 @@ load_kernel:
     mov ah, 0x42                 ; 设置AH寄存器为0x42，表示扩展磁盘读操作
     int 0x13                     ; 调用 BIOS 磁盘服务中断
     jc print_read_kernel_err_msg ; 如果Carry Flag被设置，则读取失败，跳转到 print_read_kernel_err_msg
+    ret
 
 protected_mode:
-    mov si, swith_protectedmode_msg
-    call print_string
+    ; mov si, swith_protectedmode_msg
+    ; call print_string
     
     cli                         ; 禁用中断
     lgdt [gdt_descriptor]       ; 将GDT加载到GDTR寄存器中
