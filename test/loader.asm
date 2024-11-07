@@ -266,6 +266,14 @@ long_mode_entry:
     mov byte [0xb8006], 'M'   ; 尝试在屏幕上打印字符 'M'
     mov byte [0xb8007], 0x0a  ; 设置字符属性
 
+relocate_kernel:
+    cld
+    mov rdi, 0x200000       ; 将内核从0x10000复制到0x200000
+    mov rsi, 0x10000
+    mov rcx, 51200/8
+    rep movsq
+    jmp 0x200000
+
 
 halt:
     hlt
