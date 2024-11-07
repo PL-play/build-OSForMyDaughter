@@ -222,6 +222,50 @@ protected_mode_entry:
     mov byte [0xb8003], 0x0a  ; 设置字符属性
     ret
 
+switch_long_mode:
+    ; 清空内存区域0x80000到0x90000，这是一个页面表（page table）的空间
+    cld                         ; 清除方向标志位（DF），确保后续的字符串操作（如stosd）是自增操作，即从低地址到高地址写入数据
+    mov edi, 0x80000            ; 将寄存器EDI设置为0x80000，即目标内存地址0x80000，这是将要初始化分页表的起始地址
+    xor eax, eax                ; 将寄存器EAX置零（EAX=0），准备写入0值
+    mov ecx, 0x10000 / 4        ; 将寄存器ECX设置为0x10000 / 4，表示将要写入的DWORD（32位）数量。0x10000字节除以4得到0x4000个DWORD
+    rep stosd                   ; 重复将EAX的值（0）写入EDI指向的内存区域，共写入0x4000个DWORD，初始化内存区域0x80000到0x90000为0
+
+    mov dword [0x80000], 0x81007    ;将值0x81007写入内存地址0x80000。这个值通常是一个页目录项（Page Directory Entry），指向下一级的页表地址0x81000
+    mov dword [0x81000], 10000111b  ;将二进制值10000111b写入地址0x81000。这是一个页表项（Page Table Entry），表示映射的具体页面信息：
+                                    ; 低三位111表示页面有效、可读写和用户级别权限。
+                                    ; 高位10000表示特定页面的物理地址。
+
+    ldgt [gdt64_descriptor]         ; 将GDT加载到GDTR寄存器中
+
+    ; 启用PAE（Physical Address Extension）是启用64位模式的必要条件，因为它允许CPU使用4级页表结构，以支持超过32位地址空间的寻址
+    mov eax, cr4            ; 将控制寄存器 CR4 的值加载到 EAX
+    or eax, (1 << 5)        ; 设置 CR4 的第5位为1，即启用PAE
+    mov cr4, eax            ; 将修改后的值写回 CR4
+
+    ; 设置页目录基地址
+    mov eax, 0x80000        ; 将页目录表的物理地址（这里为 0x80000）加载到 EAX
+    mov cr3, eax            ; 将 EAX 的值加载到 CR3 中，设置页表的基地址。CR3 控制页表的根地址，长模式下的分页机制依赖CR3的内容来定位页表
+
+    ; 启用EFER寄存器中的LME（Long Mode Enable）位
+    mov ecx, 0xC0000080     ; 设置 ECX 为 0xC0000080，这是 EFER（Extended Feature Enable Register）寄存器的地址
+    rdmsr                   ; 读取 EFER 的值到 EDX:EAX。EFER 是一个MSR（Model-Specific Register），包含启用长模式的标志
+    or eax, (1 << 8)        ; 设置 EAX 的第8位为1，启用LME（Long Mode Enable）
+    wrmsr                   ; 更新后的值写回 EFER，正式启用长模式支持（但还未进入长模式）
+    ; 启用分页,分页是64位模式的基础，只有在分页开启的情况下，CPU才会真正进入长模式
+    mov eax, cr0            ; 将 CR0 的值加载到 EAX
+    or eax, (1 << 31)       ; 设置 EAX 的第31位为1，即启用分页
+    mov cr0, eax            ; 将更新后的值写回 CR0，正式启用分页机制
+
+    jmp 8:long_mode_entry   ; 通过远跳转加载代码段选择子，并跳转到 long_mode_entry 标签处
+
+[BITS 64]
+long_mode_entry:
+    mov rsp, 0x7c00
+    mov byte [0xb8000], 'P'   ; 尝试在屏幕上打印字符 'P'
+    mov byte [0xb8001], 0x0a  ; 设置字符属性
+    mov byte [0xb8002], 'M'   ; 尝试在屏幕上打印字符 'M'
+    mov byte [0xb8003], 0x0a  ; 设置字符属性
+    ret
 
 halt:
     hlt
@@ -286,15 +330,27 @@ idt_descriptor: dw 0
                 dd 0
 
 
-Gdt64:
-    dq 0
-    dq 0x0020980000000000
+gdt64_start:
+    dq 0x0000000000000000  ; 空描述符，GDT中的第一个描述符必须是空的
+    ccode_segment:
+        dq 0x0020980000000000   
+                                ; D L    P DPL 1 1 C
+                                ; 0 1    1 00      0
+                                ; Base（基址）：高32位和低32位均为0（0x000000000000），表示基址为0。在64位模式下，代码段的基址被忽略。
+                                ; Limit（段界限）：高4位为0x0，低16位被省略，表示最大值，这在64位模式下同样被忽略。
+                                ; DPL：00，表示最高权限级别（内核态）。
+                                ; P：1，表示该段存在。
+                                ; Type：1000，表示可执行代码段。
+                                ; S：1，表示这是代码段。
+                                ; L（长模式位）：1，表示这是一个64位代码段。
+                                ; D/B：0，表示忽略该位。
+                                ; G（粒度）：1，表示段界限以4KB为单位。
+gdt64_end:
 
-Gdt64Len: equ $-Gdt64
 
-
-Gdt64Ptr: dw Gdt64Len-1
-          dd Gdt64
+gdt64_descriptor:
+    dw gdt64_end - gdt64_start - 1     ; GDT的大小减1（因为GDT描述符需要大小-1）
+    dq gdt64_start                     ; GDT的起始地址
 
 driveid:    db 0
 ReadPacket: times 16 db 0
