@@ -35,8 +35,8 @@ start:
     mov si, a20_test_msg
     call print_string
 
-    call swith_protected_mode
-    jmp halt
+    jmp swith_protected_mode
+
 
 
 
@@ -220,7 +220,7 @@ protected_mode_entry:
     mov byte [0xb8001], 0x0a  ; 设置字符属性
     mov byte [0xb8002], 'M'   ; 尝试在屏幕上打印字符 'M'
     mov byte [0xb8003], 0x0a  ; 设置字符属性
-    ret
+
 
 switch_long_mode:
     ; 清空内存区域0x80000到0x90000，这是一个页面表（page table）的空间
@@ -235,7 +235,7 @@ switch_long_mode:
                                     ; 低三位111表示页面有效、可读写和用户级别权限。
                                     ; 高位10000表示特定页面的物理地址。
 
-    ldgt [gdt64_descriptor]         ; 将GDT加载到GDTR寄存器中
+    lgdt [gdt64_descriptor]         ; 将GDT加载到GDTR寄存器中
 
     ; 启用PAE（Physical Address Extension）是启用64位模式的必要条件，因为它允许CPU使用4级页表结构，以支持超过32位地址空间的寻址
     mov eax, cr4            ; 将控制寄存器 CR4 的值加载到 EAX
@@ -261,11 +261,11 @@ switch_long_mode:
 [BITS 64]
 long_mode_entry:
     mov rsp, 0x7c00
-    mov byte [0xb8000], 'P'   ; 尝试在屏幕上打印字符 'P'
-    mov byte [0xb8001], 0x0a  ; 设置字符属性
-    mov byte [0xb8002], 'M'   ; 尝试在屏幕上打印字符 'M'
-    mov byte [0xb8003], 0x0a  ; 设置字符属性
-    ret
+    mov byte [0xb8004], 'L'   ; 尝试在屏幕上打印字符 'L'
+    mov byte [0xb8005], 0x0a  ; 设置字符属性
+    mov byte [0xb8006], 'M'   ; 尝试在屏幕上打印字符 'M'
+    mov byte [0xb8007], 0x0a  ; 设置字符属性
+
 
 halt:
     hlt
