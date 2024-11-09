@@ -28,9 +28,7 @@ kernel_entry:
 
     ; xor rbx,rbx                 ; 测试除0异常
     ; div rbx
-end:
-    hlt                         ; 停止 CPU（可根据需要调整其他代码）
-    jmp end
+
 
 
 init_PIT:
@@ -51,6 +49,47 @@ init_PIT:
                         ; PIT 计数器从设定的计数值（比如这里的 11931）开始倒数，每次倒数到 0 时，计数器会重置并触发一个中断信号。
                         ; 计数值越大，倒数时间越长，触发中断的频率越低；计数值越小，倒数时间越短，触发中断的频率越高。
 
+
+init_PIC:
+    ;PIC 初始化过程通常需要 4 个初始化控制字（ICW1、ICW2、ICW3 和 ICW4）来配置各个参数，指定主从 PIC 的基址、中断映射关系和工作模式。
+    ; 每个初始化控制字通过端口发送到主 PIC（0x20/0x21）和从 PIC（0xA0/0xA1）。
+    
+    ; 发送 ICW1：初始化命令.这一操作告诉主从 PIC 进入初始化模式，并期待接收接下来的 ICW2、ICW3 和 ICW4
+    mov al, 0x11        ; 将 0x11 加载到 al 中,x11 表示的二进制是 00010001，这是 ICW1 的值。
+                        ; 0x11 的具体含义：
+                        ; 位 4 设为 1：表示这是一个初始化命令。
+                        ; 位 0 设为 1：表示需要 ICW4。
+    out 0x20, al        ; 将 al 的值写入端口 0x20，发送给主 PIC
+    out 0xA0, al        ; 将 al 的值写入端口 0xA0，发送给从 PIC
+
+    ; 发送 ICW2：中断向量基址
+    mov al, 32          ; 将 32（十进制）加载到 al 中,0-31是系统中断向量，32开始自定义中断向量
+    out 0x21, al        ; 将 al 的值写入端口 0x21，配置主 PIC 的中断基址,主 PIC 的 IRQ 0 到 IRQ 7 将映射到 IDT 的 0x20 到 0x27
+    mov al, 40          ; 将 40（十进制）加载到 al 中
+    out 0xA1, al        ; 将 al 的值写入端口 0xA1，配置从 PIC 的中断基址,从 PIC 的 IRQ 8 到 IRQ 15 将映射到 IDT 的 0x28 到 0x2F
+
+    ; 发送 ICW3：主从关系
+    mov al, 4           ; 主 PIC 需要知道从 PIC 连接在哪一条 IRQ 线上,这里设置 al 为 4，即二进制 00000100，表示从 PIC 连接到主 PIC 的 IRQ2
+    out 0x21, al        ; 将 al 的值写入端口 0x21，告诉主 PIC 从 PIC 连接在 IRQ2
+    mov al, 2           ; 从 PIC 需要知道它连接到主 PIC 的哪条线路,这里设置 al 为 2，即二进制 00000010，表示它连接到主 PIC 的 IRQ2
+    out 0xA1, al        ; 将 al 的值写入端口 0xA1，配置从 PIC 的连接信息
+
+    ; 发送 ICW4：附加配置
+    mov al, 1           ; al 设置为 1，即二进制 00000001，表示 PIC 进入 8086/88 模式
+    out 0x21, al        ; 将 al 的值写入端口 0x21，发送到主 PIC
+    out 0xA1, al        ; 将 al 的值写入端口 0xA1，发送到从 PIC
+
+    ; 配置 IMR（中断屏蔽寄存器）
+    mov al, 11111110b   ; 示屏蔽主 PIC 上除了 IRQ0 之外的所有中断请求（IRQ0 通常用于系统定时器）
+    out 0x21, al        ; 将 al 的值写入端口 0x21，更新主 PIC 的 IMR
+    mov al, 11111111b   ; 表示屏蔽从 PIC 上的所有中断请求
+    out 0xA1, al        ; 将 al 的值写入端口 0xA1，更新从 PIC 的 IMR
+
+
+                        
+end:
+    hlt                         ; 停止 CPU（可根据需要调整其他代码）
+    jmp end
 
 handler0:
     ; 保存上下文
