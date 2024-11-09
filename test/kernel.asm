@@ -11,6 +11,16 @@ start:
     shr rax, 16                 ; 再次右移 16 位，以获得 handler0 的高 32 位
     mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
 
+
+    ; 设置idt第32条，即timer
+    mov rax, timer
+    add rdi, 32*16
+    mov [rdi], ax               ; 将 handler0 的低 16 位写入 Idt 表的第一个条目的 Offset [15:0]
+    shr rax, 16                 ; 右移 16 位，将 handler0 的中间 16 位移入低位
+    mov [rdi+6], ax             ; 将 handler0 的中间 16 位写入 Offset [31:16]
+    shr rax, 16                 ; 再次右移 16 位，以获得 handler0 的高 32 位
+    mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
+
     lidt [idt_descriptor]       ; 加载 IDT 表
 
 
@@ -85,7 +95,7 @@ init_PIC:
     mov al, 11111111b   ; 表示屏蔽从 PIC 上的所有中断请求
     out 0xA1, al        ; 将 al 的值写入端口 0xA1，更新从 PIC 的 IMR
 
-
+    sti
                         
 end:
     hlt                         ; 停止 CPU（可根据需要调整其他代码）
@@ -136,6 +146,51 @@ handler0:
 
 
     iretq                   ; 返回到中断前的程序位置，这是 64 位模式下的中断返回指令
+
+
+timer:
+    ; 保存上下文
+    push rax
+    push rbx
+    push rcx 
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11 
+    push r12
+    push r13
+    push r14
+    push r15
+
+    mov rsi, timer_msg        ; 打印输出
+    mov rdi, 0
+    mov rcx, 0
+    call print_string 
+
+    jmp end
+
+    ; 恢复
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx 
+    pop rbx
+    pop rax
+
+    iretq
 
 print_string:
     ; 输入: RSI - 指向要打印的字符串
@@ -200,5 +255,6 @@ idt_descriptor:
     dq idt_start
 
 
-message db     "Welcome to My Operating System!", 0  ; 要打印的字符串，以 0 结尾
-divide_by_0 db "Divided by 0                   ", 0  
+message         db "   Welcome to My Operating System!", 0  ; 要打印的字符串，以 0 结尾
+divide_by_0     db "Divided by 0                      ", 0  
+timer_msg       db "T", 0  
