@@ -182,20 +182,23 @@ end:
 
 
 user_entry:
-    mov ax, cs      ; 将 cs（代码段选择子）寄存器的值加载到 ax 中,cs 低两位包含当前的特权级（CPL），值为 3 表示用户态，值为 0 表示内核态
-    and al, 11b     ; 保留了 cs 的低 2 位，得到当前的特权级
-    cmp al, 3       ; 将 al 中的特权级与 3 进行比
-    jne uend        ; 如果 al 中的特权级不是 3（即不处于用户态），则跳转到 UEnd 标签
+    ; mov ax, cs      ; 将 cs（代码段选择子）寄存器的值加载到 ax 中,cs 低两位包含当前的特权级（CPL），值为 3 表示用户态，值为 0 表示内核态
+    ; and al, 11b     ; 保留了 cs 的低 2 位，得到当前的特权级
+    ; cmp al, 3       ; 将 al 中的特权级与 3 进行比
+    ; jne uend        ; 如果 al 中的特权级不是 3（即不处于用户态），则跳转到 UEnd 标签
 
 
 
-    mov rsi, user_mode_msg        ; 打印输出
-    mov rdi, 9
-    mov rcx, -16
-    call print_string 
+    ; mov rsi, user_mode_msg        ; 打印输出
+    ; mov rdi, 9
+    ; mov rcx, -16
+    ; call print_string 
+
+    inc byte[0xb8004]
+    mov byte[0xb8005], 0xf
    
 uend:
-    jmp uend        ; 如果不在用户态，则跳转到 uend，说明切换失败
+    jmp user_entry        ; 如果不在用户态，则跳转到 uend，说明切换失败
 
 
 handler0:
