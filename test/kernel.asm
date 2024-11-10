@@ -4,22 +4,19 @@
 start:    
     mov rdi, idt_start          ; 将Idt 表的起始地址加载到 rdi 寄存器中，rdi 在此用作指针
     mov rax, handler0           ; 将中断处理程序 handler0 的地址加载到 rax 中
-    ; 分几步将 handler0 地址存入 IDT 的第一个条目
-    mov [rdi], ax               ; 将 handler0 的低 16 位写入 Idt 表的第一个条目的 Offset [15:0]
-    shr rax, 16                 ; 右移 16 位，将 handler0 的中间 16 位移入低位
-    mov [rdi+6], ax             ; 将 handler0 的中间 16 位写入 Offset [31:16]
-    shr rax, 16                 ; 再次右移 16 位，以获得 handler0 的高 32 位
-    mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
+    call set_handler
 
 
     ; 设置idt第32条，即timer
+    mov rdi, idt_start+32*16
     mov rax, timer
-    add rdi, 32*16
-    mov [rdi], ax               ; 将 handler0 的低 16 位写入 Idt 表的第一个条目的 Offset [15:0]
-    shr rax, 16                 ; 右移 16 位，将 handler0 的中间 16 位移入低位
-    mov [rdi+6], ax             ; 将 handler0 的中间 16 位写入 Offset [31:16]
-    shr rax, 16                 ; 再次右移 16 位，以获得 handler0 的高 32 位
-    mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
+    call set_handler
+
+    mov rdi, idt_start+ 32*16 + 7*16     ; 处理假中断，IRQ7的中断向量位与32+7,每个条目16字节
+    mov rax, SIRQ
+    call set_handler
+   
+    
 
     lidt [idt_descriptor]       ; 加载 IDT 表
     lgdt [gdt64_descriptor]     ; 加载64位模式的GDT表指针
@@ -181,6 +178,15 @@ end:
     jmp end
 
 
+set_handler:
+    ; 分几步将 handler 地址存入 IDT 的条目
+    mov [rdi], ax               ; 将 handler0 的低 16 位写入 Idt 表的第一个条目的 Offset [15:0]
+    shr rax, 16                 ; 右移 16 位，将 handler0 的中间 16 位移入低位
+    mov [rdi+6], ax             ; 将 handler0 的中间 16 位写入 Offset [31:16]
+    shr rax, 16                 ; 再次右移 16 位，以获得 handler0 的高 32 位
+    mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
+    ret
+
 user_entry:
     ; mov ax, cs      ; 将 cs（代码段选择子）寄存器的值加载到 ax 中,cs 低两位包含当前的特权级（CPL），值为 3 表示用户态，值为 0 表示内核态
     ; and al, 11b     ; 保留了 cs 的低 2 位，得到当前的特权级
@@ -290,6 +296,59 @@ timer:
     pop rax
 
     iretq
+
+SIRQ:
+     ; 保存上下文
+    push rax
+    push rbx
+    push rcx 
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11 
+    push r12
+    push r13
+    push r14
+    push r15
+
+    ; 7 6 5 4 3 2 1 0 bit
+    ; 0 0 0 0 1 0 1 1       0-1位设为11表示ISR寄存器，3位设为1表示读取
+    mov al,11
+    out 0x20,al
+
+    in al,0x20  ; 读取命令寄存器
+
+    test al,(1<<7)  ; 测试ISR寄存器第7位是否位0
+    jz .end
+
+    mov al,0x20         ; 将 0x20 载入 al 寄存器。0x20 是 PIC 中的 EOI 命令，用于通知 PIC 当前的中断处理已完成。
+    out 0x20,al         ; 将 al 寄存器中的值（即 0x20）输出到端口 0x20。端口 0x20 是主 PIC 的控制端口，发送 EOI 命令到该端口后，主 PIC 会将该中断的状态标记为结束，允许再次触发同类型的中断。
+
+
+.end
+    ; 恢复
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx 
+    pop rbx
+    pop rax
+
+    iretq
+
 
 print_string:
     ; 输入: RSI - 指向要打印的字符串
