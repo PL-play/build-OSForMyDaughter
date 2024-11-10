@@ -263,12 +263,11 @@ timer:
     push r14
     push r15
 
-    mov rsi, timer_msg        ; 打印输出
-    mov rdi, 0
-    mov rcx, 0
-    call print_string 
+    inc byte[0xb8000]
+    mov byte[0xb8001], 0xe
 
-    jmp end
+    mov al,0x20         ; 将 0x20 载入 al 寄存器。0x20 是 PIC 中的 EOI 命令，用于通知 PIC 当前的中断处理已完成。
+    out 0x20,al         ; 将 al 寄存器中的值（即 0x20）输出到端口 0x20。端口 0x20 是主 PIC 的控制端口，发送 EOI 命令到该端口后，主 PIC 会将该中断的状态标记为结束，允许再次触发同类型的中断。
 
     ; 恢复
     pop r15
