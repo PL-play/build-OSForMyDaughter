@@ -189,10 +189,10 @@ user_entry:
 
 
 
-    ; mov rsi, user_mode_msg        ; 打印输出
-    ; mov rdi, 9
-    ; mov rcx, -16
-    ; call print_string 
+    mov rsi, user_mode_msg        ; 打印输出
+    mov rdi, 9
+    mov rcx, -16
+    call print_string 
 
     inc byte[0xb8004]
     mov byte[0xb8005], 0xf
