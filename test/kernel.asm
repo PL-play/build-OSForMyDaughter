@@ -22,9 +22,26 @@ start:
     mov [rdi+8], eax            ; 将 handler0 的高 32 位写入 Offset [63:32]
 
     lidt [idt_descriptor]       ; 加载 IDT 表
-
-
     lgdt [gdt64_descriptor]     ; 加载64位模式的GDT表指针
+
+
+set_tss:
+    ; 这部分代码将 TSS 的基地址写入到 TSS 描述符的相应位置中，以便 CPU 能够识别 TSS 在内存中的实际位置
+
+    mov rax, tss                    ; 将 TSS 的基地址加载到 rax 寄存器中
+    mov [tss_descriptor+2], ax      ; 将基地址的低 16 位写入 TssDesc+2 处
+    shr rax, 16                     ; 右移 rax 16 位，以获取基地址的中间 8 位
+    mov [tss_descriptor+4], al      ; 将基地址的中间 8 位写入 TssDesc+4
+    shr rax, 8                      ; 继续右移 8 位，以获取基地址的更高 8 位
+    mov [tss_descriptor+7], al      ; 将基地址的更高 8 位写入 TssDesc+7
+    shr rax, 8                      ; 继续右移 8 位，以获取基地址的最高 32 位
+    mov [tss_descriptor+8], eax     ; 将基地址的最高 32 位写入 TssDesc+8.将 
+                                    ; TSS 的 64 位基地址分段写入 TSS 描述符的不同字段，从而在 GDT 中建立 TSS 描述符。
+    ; 加载 TSS 描述符
+    mov ax, 0x20        ;  GDT 中 TSS 描述符的选择子(第5条)加载到 ax 寄存器中
+    ltr ax              ; 加载任务寄存器（Task Register）。ltr 指令会将选择子的内容加载到任务寄存器中，从而启用 TSS
+
+
     push 8                      ; 将代码段选择子 8 压入栈中。这里的 8 是在GDT中定义的代码段选择子，表示64位代码段
     push kernel_entry           ; 将标签 kernel_entry 的地址压入栈中，表示要跳转到的目标地址
     db 0x48                     ; 这一步插入字节 0x48，表示下一条指令是远返回（retf）所需的字节数。这里 0x48 是操作码（OpCode），没有特别含义，只是为了和 retf 配合使用
@@ -94,7 +111,7 @@ init_PIC:
     out 0x21, al        ; 将 al 的值写入端口 0x21，更新主 PIC 的 IMR
     mov al, 11111111b   ; 表示屏蔽从 PIC 上的所有中断请求
     out 0xA1, al        ; 将 al 的值写入端口 0xA1，更新从 PIC 的 IMR
-
+    ; 开启中断
     ; sti               
 
 switch_user_mode:
@@ -148,7 +165,12 @@ switch_user_mode:
     ; 切换到用户态的过程    
     push 0x18 | 3       ; 将 0x18 | 3 压入栈中.这里 0x18 是用户态的栈段选择子，3 表示用户态的特权级（Ring 3）.0x18 | 3 的结果就是设置了特权级 3 的用户栈段选择子，用于在用户态栈段中指向用户态的栈
     push 0x7c00         ; 将 0x7c00 压入栈中.这是用户态的栈顶地址，用于在切换到用户态后初始化用户态的栈指针（rsp）。
-    push 0x2            ; 将 0x2 压入栈中.这里 0x2 是要加载到标志寄存器 RFLAGS 中的值，通常用于设置或清除特定的标志位
+
+    push 0x202          ; 63....9....1 0   bit
+                        ; 0 ....1....1 0   =  0x202.
+                        ; 第9位设置为1表示中断被启用。当返回到user_entry后，中断被启用
+                        ; 将 0x202 压入栈中.这里 0x202 是要加载到标志寄存器 RFLAGS 中的值，通常用于设置或清除特定的标志位
+
     push 0x10 | 3       ; 将 0x10 | 3 压入栈中.0x10 是用户态的代码段选择子，3 表示用户态的特权级（Ring 3）,这样可以确保切换后进入用户态代码段（cs 寄存器会被更新为用户态的代码段选择子）
     push user_entry     ; 用户态代码的入口地址，在切换到用户态后会从该地址开始执行代码
     iretq               ; iretq 是 x86-64 架构中用于恢复中断时上下文的指令，它会从栈中弹出 RIP、CS、RFLAGS、RSP 和 SS 的值，完成特权级的切换
@@ -292,7 +314,7 @@ print_string:
 
 gdt64_start:
     dq 0x0000000000000000  ; 空描述符，GDT中的第一个描述符必须是空的
-    ccode_segment:
+    code_segment:
         dq 0x0020980000000000   
                                 ; D L    P DPL 1 1 C
                                 ; 0 1    1 00      0
@@ -322,6 +344,17 @@ gdt64_start:
                                 ; L = 0：该段不作为代码段。
                                 ; D = 0：D 位被忽略。
 
+    tss_descriptor:
+        dw tss_len-1 ; 段限长（Limit），设置为 tss_len - 1，表示 TSS 的长度减去 1。这个值用于限制 TSS 的访问范围
+        dw 0        ; base address的低24位，暂时设为0, 后续赋值
+        db 0        ; 
+        db 0x89     ; 属性字段 P DPL TYPE
+                    ;         1 00  01001 -> 表示64位tss
+
+        db 0        ; 用于填充和对齐描述符字段  
+        db 0
+        dq 0
+
 
 gdt64_end:
 
@@ -346,6 +379,15 @@ idt_end:
 idt_descriptor:
     dw idt_end-idt_start-1
     dq idt_start
+
+tss:
+    ; 定义 TSS 结构的起始地址。TSS 是一个存储与任务状态相关的数据结构，在 64 位模式下主要用于中断栈表（IST）和内核栈指针（RSP0 等）的管理
+    dd 0            ; TSS 结构的第一个双字（4 字节）通常为保留字段
+    dq 0x150000     ; 这是内核栈指针 RSP0 的值，指向内核栈的地址（例如 0x150000）。当从用户态切换到内核态时，CPU 会加载 RSP0 的值作为内核栈的起始地址
+    times 88 db 0   ; 填充 TSS 的剩余字段，用 88 个字节的零来填充，以符合 TSS 的长度要求
+    dd tss_len      ; 存储 TSS 的长度，便于后续设置描述符长度
+
+tss_len: equ $-tss  ; 计算 TSS 的总长度（从 Tss 起始地址到当前位置），为后续的 GDT 描述符设置长度信息
 
 
 message         db "   Welcome to My Operating System!", 0  ; 要打印的字符串，以 0 结尾
