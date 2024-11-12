@@ -53,3 +53,7 @@ dkms.conf
 cmake-*
 build
 .idea
+src/*.img
+src/*.bin
+src/*.o
+src/kernel
